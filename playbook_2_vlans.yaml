@@ -1,0 +1,77 @@
+##Con este playbook se ponen 2 SSIDs con VLANs diferentes en abierto.
+
+- name: Configurar AP Cisco
+  hosts: AP_CISCO
+  connection: network_cli
+  gather_facts: no
+
+  vars:
+    vlans:
+      - { id: 1, name: "GS" }
+      - { id: 80, name: "CLIENTES" }
+      - { id: 40, name: "CLIENTES-VIP" }
+
+    ssid_configurations:
+      - { name: "CLIENTES", vlan: 80 }
+      - { name: "CLIENTES-VIP", vlan: 40 }
+
+  tasks:
+    - name: Configuración AAA
+      ios_config:
+        lines:
+          - aaa new-model
+          - aaa authentication login default local
+          - aaa authorization exec default local
+          - dot11 network-map
+
+    - name: Configuración de VLANs
+      ios_config:
+        lines:
+          - "dot11 vlan-name {{ item.name }} vlan {{ item.id }}"
+        loop: "{{ vlans }}"
+
+    - name: Configurar SSIDs y asociar VLANs
+      ios_config:
+        lines:
+          - "dot11 ssid {{ item.name }}"
+          - "vlan {{ item.vlan }}"
+          - "authentication open"
+          - "mbssid guest-mode"
+        parents: "dot11 ssid {{ item.name }}"
+      loop: "{{ ssid_configurations }}"
+
+    - name: Configurar interfaz Dot11Radio0 y SSIDs
+      ios_config:
+        lines:
+          - "no shutdown"
+          - "ssid {{ item.name }}"
+          - "bridge-group 1"
+          - "antenna gain 0"
+          - "mbssid"
+        parents: "interface Dot11Radio0"
+      loop: "{{ ssid_configurations }}"
+
+    - name: Configuración de interfaces Dot11Radio0.XX SSIDs
+      ios_config:
+        lines:
+          - "encapsulation dot1Q {{ item.vlan }}"
+          - "bridge-group {{ item.vlan }}"
+        parents: "interface Dot11Radio0.{{ item.vlan }}"
+      loop: "{{ vlans }}"
+      when: item.id != 1  # Evitar la configuración para la VLAN 1
+
+    - name: Configuración de interfaces GigabitEthernet0.XX VLANs
+      ios_config:
+        lines:
+          - "encapsulation dot1Q {{ item.id }}"
+          - "bridge-group {{ item.id }}"
+        parents: "interface GigabitEthernet0.{{ item.id }}"
+      loop: "{{ vlans }}"
+      when: item.id != 1  # Evitar la configuración para la VLAN 1
+
+    - name: Configuración de interfaz GigabitEthernet0 por defecto
+      ios_config:
+        lines:
+          - "no shutdown"
+          - "bridge-group 1"
+        parents: "interface GigabitEthernet0"

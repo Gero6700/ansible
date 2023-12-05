@@ -1,0 +1,64 @@
+---
+- name: Configurar AP Cisco
+  hosts: AP_CISCO
+  connection: network_cli
+  gather_facts: no
+
+  tasks:
+    - name: Configuración AAA
+      ios_config:
+        lines:
+          - aaa new-model
+          - aaa authentication login default local
+          - aaa authorization exec default local
+          - dot11 network-map
+
+    - name: Configuración de WLAN y SSID
+      ios_config:
+        lines:
+          - dot11 vlan-name GS vlan 1
+          - dot11 vlan-name CLIENTES vlan 80
+
+    - name: Configurar SSID CLIENTES y asociar VLAN 80
+      ios_config:
+        lines:
+          - dot11 ssid CLIENTES
+          - vlan 80
+          - authentication open
+          - mbssid guest-mode
+        parents: "dot11 ssid CLIENTES"
+
+    - name: Configurar interfaz Dot11Radio0 y SSID CLIENTES
+      ios_config:
+        lines:
+          - interface Dot11Radio0
+          - no shutdown
+          - ssid CLIENTES
+          - bridge-group 1
+          - antenna gain 0
+          - mbssid
+        parents: "interface Dot11Radio0"
+
+    - name: Configuración de interfaz Dot11Radio0.80 SSID CLIENTES
+      ios_config:
+        lines:
+          - interface Dot11Radio0.80
+          - encapsulation dot1Q 80
+          - bridge-group 80
+        parents: "interface Dot11Radio0.80"
+
+    - name: Configuración de interfaz GIGABIT
+      ios_config:
+        lines:
+          - interface GigabitEthernet0
+          - no shutdown
+          - bridge-group 1
+        parents: "interface GigabitEthernet0"
+
+    - name: Configuración de interfaz GIGABIT VLAN CLIENTES
+      ios_config:
+        lines:
+          - interface GigabitEthernet0.80
+          - encapsulation dot1Q 80
+          - bridge-group 80
+        parents: "interface GigabitEthernet0.80"
